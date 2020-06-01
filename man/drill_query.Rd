@@ -17,21 +17,42 @@ ignored if \code{drill_con} is a \code{JDBCConnection} created by
 \code{drill_jdbc()})}
 
 \item{.progress}{if \code{TRUE} (default if in an interactive session) then ask
-\code{httr::POST} to display a progress bar}
+\code{httr::RETRY} to display a progress bar}
 }
 \description{
 This function can handle REST API connections or JDBC connections. There is a benefit to
 calling this function for JDBC connections vs a straight call to \code{dbGetQuery()} in
-that the function result is a `tbl_df` vs a plain \code{data.frame} so you get better
+that the function result is a \code{tbl_df} vs a plain \code{data.frame} so you get better
 default printing (which can be helpful if you accidentally execute a query and the result
 set is huge).
 }
 \examples{
-\dontrun{
+try({
 drill_connection() \%>\%
   drill_query("SELECT * FROM cp.`employee.json` limit 5")
-}
+}, silent=TRUE)
 }
 \references{
 \href{https://drill.apache.org/docs/}{Drill documentation}
 }
+\seealso{
+Other Drill direct REST API Interface: 
+\code{\link{drill_active}()},
+\code{\link{drill_cancel}()},
+\code{\link{drill_connection}()},
+\code{\link{drill_functions}()},
+\code{\link{drill_metrics}()},
+\code{\link{drill_options}()},
+\code{\link{drill_opts}()},
+\code{\link{drill_profiles}()},
+\code{\link{drill_profile}()},
+\code{\link{drill_settings_reset}()},
+\code{\link{drill_set}()},
+\code{\link{drill_stats}()},
+\code{\link{drill_status}()},
+\code{\link{drill_storage}()},
+\code{\link{drill_system_reset}()},
+\code{\link{drill_threads}()},
+\code{\link{drill_version}()}
+}
+\concept{Drill direct REST API Interface}

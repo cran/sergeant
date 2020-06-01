@@ -5,8 +5,13 @@
 \alias{tbl.src_drill}
 \title{Connect to Drill (dplyr)}
 \usage{
-src_drill(host = Sys.getenv("DRILL_HOST", "localhost"),
-  port = as.integer(Sys.getenv("DRILL_PORT", 8047L)), ssl = FALSE)
+src_drill(
+  host = Sys.getenv("DRILL_HOST", "localhost"),
+  port = as.integer(Sys.getenv("DRILL_PORT", 8047L)),
+  ssl = FALSE,
+  username = NULL,
+  password = NULL
+)
 
 \method{tbl}{src_drill}(src, from, ...)
 }
@@ -17,6 +22,8 @@ src_drill(host = Sys.getenv("DRILL_HOST", "localhost"),
 
 \item{ssl}{use ssl?}
 
+\item{username, password}{if not \code{NULL} the credentials for the Drill service.}
+
 \item{src}{A Drill "src" created with \code{src_drill()}}
 
 \item{from}{A Drill view or table specification}
@@ -24,16 +31,16 @@ src_drill(host = Sys.getenv("DRILL_HOST", "localhost"),
 \item{...}{Extra parameters}
 }
 \description{
-Use \code{src_drill()} to connect to a Drill cluster and `tbl()` to connect to a
+Use \code{src_drill()} to connect to a Drill cluster and \code{tbl()} to connect to a
 fully-qualified "table reference". The vast majority of Drill SQL functions have
 also been made available to the \code{dplyr} interface. If you have custom Drill
 SQL functions that need to be implemented please file an issue on GitHub.
 }
 \note{
-This is a DBI wrapper around the Drill REST API. TODO username/password support
+This is a DBI wrapper around the Drill REST API.
 }
 \examples{
-\dontrun{
+try({
 db <- src_drill("localhost", 8047L)
 
 print(db)
@@ -77,5 +84,15 @@ select(emp, full_name) \%>\%
 ##  9     2      Darren Stanz    12 Darren Stanz********     5      D*rr*n St*nz
 ## 10     4 Jonathan Murraiin    17 Jonathan Murraiin***     0 J*n*th*n M*rr***n
 ## # ... with more rows, and 3 more variables: rpd <chr>, rnd <dbl>, first_three <chr>
+}, silent=TRUE)
 }
+\seealso{
+Other Drill REST API (dplyr): 
+\code{\link{drill_custom_functions}},
+\code{\link{src_tbls.src_drill}()}
+
+Other Drill REST API (dplyr): 
+\code{\link{drill_custom_functions}},
+\code{\link{src_tbls.src_drill}()}
 }
+\concept{Drill REST API (dplyr)}

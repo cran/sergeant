@@ -4,10 +4,13 @@
 \alias{drill_show_schemas}
 \title{Returns a list of available schemas.}
 \usage{
-drill_show_schemas(drill_con)
+drill_show_schemas(drill_con, .progress = interactive())
 }
 \arguments{
 \item{drill_con}{drill server connection object setup by \code{drill_connection()}}
+
+\item{.progress}{if \code{TRUE} (default if in an interactive session) then ask
+\code{httr::RETRY} to display a progress bar}
 }
 \description{
 Returns a list of available schemas.
@@ -15,3 +18,9 @@ Returns a list of available schemas.
 \references{
 \href{https://drill.apache.org/docs/}{Drill documentation}
 }
+\seealso{
+Other Dill direct REST API Interface: 
+\code{\link{drill_show_files}()},
+\code{\link{drill_use}()}
+}
+\concept{Dill direct REST API Interface}

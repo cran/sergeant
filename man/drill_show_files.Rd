@@ -4,21 +4,30 @@
 \alias{drill_show_files}
 \title{Show files in a file system schema.}
 \usage{
-drill_show_files(drill_con, schema_spec)
+drill_show_files(drill_con, schema_spec, .progress = interactive())
 }
 \arguments{
 \item{drill_con}{drill server connection object setup by \code{drill_connection()}}
 
 \item{schema_spec}{properly quoted "filesystem.directory_name" reference path}
+
+\item{.progress}{if \code{TRUE} (default if in an interactive session) then ask
+\code{httr::RETRY} to display a progress bar}
 }
 \description{
 Show files in a file system schema.
 }
 \examples{
-\dontrun{
+try({
 drill_connection() \%>\% drill_show_files("dfs.tmp")
-}
+}, silent=TRUE)
 }
 \references{
 \href{https://drill.apache.org/docs/}{Drill documentation}
 }
+\seealso{
+Other Dill direct REST API Interface: 
+\code{\link{drill_show_schemas}()},
+\code{\link{drill_use}()}
+}
+\concept{Dill direct REST API Interface}

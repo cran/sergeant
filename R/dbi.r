@@ -1,8 +1,9 @@
-s_head <- purrr::safely(httr::HEAD)
+s_head <- purrr::safely(function(...){httr::RETRY(verb = "HEAD", ...)})
 
 #' Driver for Drill database.
 #'
 #' @keywords internal
+#' @family Drill REST DBI API
 #' @export
 setClass(
   "DrillDriver",
@@ -14,6 +15,7 @@ setClass(
 #' @rdname DrilDriver-class
 #' @param drv driver
 #' @param ... Extra optional parameters
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   "dbUnloadDriver",
@@ -27,6 +29,7 @@ setMethod("show", "DrillDriver", function(object) {
 
 #' Drill
 #'
+#' @family Drill REST DBI API
 #' @export
 Drill <- function() {
   new("DrillDriver")
@@ -44,7 +47,8 @@ setClass(
     port = "integer",
     ssl = "logical",
     username = "character",
-    password = "character"
+    password = "character",
+    implicits = "character"
   )
 )
 
@@ -55,12 +59,34 @@ setClass(
 #' @param host host
 #' @param port port
 #' @param ssl use ssl?
+#' @param username,password credentials
 #' @param ... Extra optional parameters
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   "dbConnect",
-  "DrillDriver", function(drv, host = "localhost", port = 8047L, ssl = FALSE, ...) {
-    new("DrillConnection", host = host, port = port, ssl = ssl, ...)
+  "DrillDriver", function(drv, host = "localhost", port = 8047L, ssl = FALSE,
+                          username = NULL, password = NULL, ...) {
+
+
+    if (!is.null(username)) {
+      auth_drill(ssl, host, port, username, password)
+    } else {
+      username <- ""
+      password <- ""
+    }
+
+    dc <- drill_connection(host, port, ssl, username, password)
+    dops <- drill_options(dc, "drill.exec.storage.implicit")
+
+    new(
+      "DrillConnection",
+      host = host, port = port, ssl = ssl,
+      username = username, password = password,
+      implicits = dops$value,
+      ...
+    )
+
   }
 )
 
@@ -71,7 +97,7 @@ setMethod(
 setMethod(
   "dbDisconnect",
   "DrillConnection", function(conn, ...) {
-    TRUE
+    invisible(TRUE)
   },
   valueClass = "logical"
 )
@@ -100,6 +126,8 @@ cmake_server <- function(conn) {
 #' @param conn connection
 #' @param statement SQL statement
 #' @param ... passed on to methods
+#' @export
+#' @family Drill REST DBI API
 #' @aliases dbSendQuery,DrillConnection,character-method
 setMethod(
   "dbSendQuery",
@@ -116,6 +144,7 @@ setMethod(
 #' Clear
 #'
 #' @rdname DrillResult-class
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   "dbClearResult",
@@ -127,6 +156,7 @@ setMethod(
 #'
 #' @rdname DrillResult-class
 #' @param .progress show data transfer progress?
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   "dbFetch",
@@ -134,25 +164,202 @@ setMethod(
   function(res, .progress=FALSE, ...) {
 
     if (.progress) {
-      res <- httr::POST(sprintf("%s/query.json", res@drill_server),
-                        encode="json", progress(),
-                        body=list(queryType="SQL", query=res@statement))
+
+      httr::RETRY(
+        verb = "POST",
+        url = res@drill_server,
+        path = "/query.json",
+        encode = "json",
+        progress(),
+        body = list(
+          queryType = "SQL",
+          query = res@statement
+        ),
+        terminate_on = c(403, 404)
+      ) -> resp
+
     } else {
-      res <- httr::POST(sprintf("%s/query.json", res@drill_server),
-                        encode="json",
-                        body=list(queryType="SQL", query=res@statement))
+
+      httr::RETRY(
+        verb = "POST",
+        url = res@drill_server,
+        path = "/query.json",
+        encode = "json",
+        body = list(
+          queryType = "SQL",
+          query = res@statement
+        ),
+        terminate_on = c(403, 404)
+      ) -> resp
+
     }
 
-    if (httr::status_code(res) != 200) {
-      warning(content(res, as="parsed"))
-      dplyr::data_frame()
+    if (httr::status_code(resp) != 200) {
+
+      resp <- httr::content(resp, as="parsed")
+      resp <- resp$errorMessage
+      resp <- unlist(strsplit(resp, "\n"))
+
+      err <- resp[grepl("Error Id", resp)]
+
+      resp <- resp[resp != ""]
+      resp <- resp[!grepl("Error Id", resp)]
+
+      err <- sub("^.*: ", "", err)
+      err <- unlist(strsplit(err, "[[:space:]]+"))[1]
+
+      oq <- unlist(strsplit(res@statement, "\n"))
+
+      c(
+        resp,
+        "\nOriginal Query:\n",
+        sprintf("%3d: %s", 1:length(oq), oq),
+        sprintf(
+          "\nQuery Profile Error Link:\n%s/profiles/%s",
+          res@drill_server, err
+        )
+      ) -> resp
+
+      resp <- paste0(resp, collapse="\n")
+
+      warning(resp, call.=FALSE)
+
+      xdf <- dplyr::tibble()
+      return(xdf)
+
     } else {
-      out <- jsonlite::fromJSON(httr::content(res, as="text", encoding="UTF-8"), flatten=TRUE)
-      out <- suppressMessages(dplyr::tbl_df(readr::type_convert(out$rows)))
-      out
+
+      orig <- httr::content(resp, as="text", encoding="UTF-8")
+
+      out <- jsonlite::fromJSON(orig, flatten=TRUE)
+
+      xdf <- out$rows
+
+      # ** only available in Drill 1.15.0+ **
+      # properly arrange columns
+      if (length(out$columns) != 0) {
+        if (is.data.frame(xdf)) {
+          if (nrow(xdf) > 0) xdf <- xdf[,out$columns,drop=FALSE]
+        } else {
+          lapply(1:length(out$columns), function(col_idx) {
+            ctype <- out$metadata[col_idx]
+            if (ctype == "INT") {
+              integer(0)
+            } else if (ctype == "VARCHAR") {
+              character(0)
+            } else if (ctype == "TIMESTAMP") {
+              cx <- integer(0)
+              class(cx) <- "POSIXct"
+              cx
+            } else if (ctype == "BIGINT") {
+              integer64(0)
+            } else if (ctype == "BINARY") {
+              character(0)
+            } else if (ctype == "BOOLEAN") {
+              logical(0)
+            } else if (ctype == "DATE") {
+              cx <- integer(0)
+              class(cx) <- "Date"
+              cx
+            } else if (ctype == "FLOAT") {
+              numeric(0)
+            } else if (ctype == "DOUBLE") {
+              double(0)
+            } else if (ctype == "TIME") {
+              character(0)
+            } else if (ctype == "INTERVAL") {
+              character(0)
+            } else {
+              character(0)
+            }
+          }) -> xdf
+          xdf <- set_names(xdf, out$columns)
+          class(xdf) <- c("data.frame")
+          return(xdf)
+        }
+      } else {
+        xdf <- dplyr::tibble()
+        return(xdf)
+      }
+
+      # ** only available in Drill 1.15.0+ **
+      # be smarter about type conversion now that the REST API provides
+      # the necessary metadata
+      if (length(out$metadata)) {
+
+        if ("BIGINT" %in% out$metadata) {
+          if (!.pkgenv$bigint_warn_once) {
+            if (getOption("sergeant.bigint.warnonce", TRUE)) {
+              warning(
+                "One or more columns are of type BIGINT. ",
+                "The sergeant package currently uses jsonlite::fromJSON() ",
+                "to process Drill REST API result sets. Since jsonlite does not ",
+                "support 64-bit integers BIGINT columns are initially converted ",
+                "to numeric since that's how jsonlite::fromJSON() works. This is ",
+                "problematic for many reasons, including trying to use 'dplyr' idioms ",
+                "with said converted BIGINT-to-numeric columns. It is recommended that ",
+                "you 'CAST' BIGINT columns to 'VARCHAR' prior to working with them from ",
+                "R/'dplyr'.\n\n",
+                "If you really need BIGINT/integer64 support, consider using the ",
+                "R ODBC interface to Apache Drill with the MapR ODBC drivers.\n\n",
+                "This informational warning will only be shown once per R session and ",
+                "you can disable them from appearing by setting the 'sergeant.bigint.warnonce' ",
+                "option to 'FALSE' (i.e. options(sergeant.bigint.warnonce = FALSE)).",
+                call.=FALSE
+              )
+            }
+            .pkgenv$bigint_warn_once <- TRUE
+          }
+        }
+
+        sapply(1:length(out$columns), function(col_idx) {
+
+          cname <- out$columns[col_idx]
+          ctype <- out$metadata[col_idx]
+
+          case_when(
+            ctype == "INT" ~ "i",
+            ctype == "VARCHAR" ~ "c",
+            ctype == "TIMESTAMP" ~ "?",
+            ctype == "BIGINT" ~ "?",
+            ctype == "BINARY" ~ "c",
+            ctype == "BOOLEAN" ~ "l",
+            ctype == "DATE" ~ "?",
+            ctype == "FLOAT" ~ "d",
+            ctype == "DOUBLE" ~ "d",
+            ctype == "TIME" ~ "c",
+            ctype == "INTERVAL" ~ "?",
+            TRUE ~ "?"
+          )
+
+        }) -> col_types
+
+        suppressMessages(
+          tibble::as_tibble(
+            readr::type_convert(
+              df = xdf,
+              col_types = paste0(col_types, collapse=""),
+              na = character()
+            )
+          )
+        ) -> xdf
+
+      } else {
+
+        suppressMessages(
+          tibble::as_tibble(
+            readr::type_convert(df = xdf, na = character())
+          )
+        ) -> xdf
+
+      }
+
+      xdf
+
     }
 
   }
+
 )
 
 #' Drill dbDataType
@@ -160,17 +367,22 @@ setMethod(
 #' @param dbObj A \code{\linkS4class{DrillDriver}} object
 #' @param obj Any R object
 #' @param ... Extra optional parameters
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   "dbDataType",
   "DrillConnection",
   function(dbObj, obj, ...) {
+
+    stopifnot(!is.null(obj))
+
     if (is.integer(obj)) "INTEGER"
     else if (inherits(obj, "Date")) "DATE"
     else if (identical(class(obj), "times")) "TIME"
     else if (inherits(obj, "POSIXct")) "TIMESTAMP"
+    else if (inherits(obj, "integer64")) "BIGINT"
     else if (is.numeric(obj)) "DOUBLE"
-    else "VARCHAR(255)"
+    else "VARCHAR"
   },
   valueClass = "character"
 )
@@ -178,6 +390,7 @@ setMethod(
 #' Completed
 #'
 #' @rdname DrillResult-class
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   "dbHasCompleted",
@@ -186,6 +399,7 @@ setMethod(
 )
 
 #' @rdname DrillConnection-class
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   'dbIsValid',
@@ -197,37 +411,111 @@ setMethod(
 )
 
 #' @rdname DrillConnection-class
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   'dbListFields',
   c('DrillConnection', 'character'),
   function(conn, name, ...) {
-    quoted.name <- dbQuoteIdentifier(conn, name)
+    #quoted.name <- dbQuoteIdentifier(conn, name)
+    quoted.name <- name
     names(dbGetQuery(conn, paste('SELECT * FROM', quoted.name, 'LIMIT 1')))
   }
 )
 
 #' @rdname DrillResult-class
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   'dbListFields',
   signature(conn='DrillResult', name='missing'),
   function(conn, name) {
-    res <- httr::POST(sprintf("%s/query.json", conn@drill_server),
-                      encode="json",
-                      body=list(queryType="SQL", query=conn@statement))
-    out <- jsonlite::fromJSON(httr::content(res, as="text", encoding="UTF-8"), flatten=TRUE)
-    out <- suppressMessages(dplyr::tbl_df(readr::type_convert(out$rows)))
-    colnames(out)
+    httr::RETRY(
+      verb = "POST",
+      sprintf("%s/query.json", conn@drill_server),
+      encode = "json",
+      body = list(queryType="SQL", query=conn@statement
+      ),
+      terminate_on = c(403, 404)
+    ) -> res
+
+    # fatal query error on the Drill side so return no fields
+    if (httr::status_code(res) != 200)  return(character())
+
+    out <- httr::content(res, as = "text", encoding = "UTF-8")
+
+    out <- jsonlite::fromJSON(out, flatten = TRUE)
+
+    if (length(out$columns) != 0) {
+      return(out$columns)
+    } else {
+      return(colnames(out$rows))
+    }
+
   }
 )
 
 #' Statement
 #'
 #' @rdname DrillResult-class
+#' @family Drill REST DBI API
 #' @export
 setMethod(
   'dbGetStatement',
   'DrillResult',
   function(res, ...) { return(res@statement) }
 )
+
+
+#' Metadata about database objects
+#' @rdname dbGetInfo
+#' @param dbObj A \code{\linkS4class{DrillDriver}} or \code{\linkS4class{DrillConnection}} object
+#' @export
+setMethod(
+  "dbGetInfo",
+  "DrillDriver",
+  function(dbObj) {
+    return(
+      list(
+        driver.version = packageVersion("sergeant"),
+        client.version = packageVersion("sergeant")
+      )
+    )
+  }
+)
+
+#' @rdname dbGetInfo
+#' @export
+setMethod(
+  "dbGetInfo",
+  "DrillConnection",
+  function(dbObj) {
+    return(list(
+      host = dbObj@host,
+      port = dbObj@port,
+      username = dbObj@username,
+      ssl = dbObj@ssl,
+      implicits = dbObj@implicits,
+      db.version = dbGetQuery(dbObj, "SELECT version FROM sys.version")[["version"]],
+      dbname = ""
+    ))
+  }
+)
+
+#' A concise character representation (label) for a `DrillConnection`
+#'
+#' @param x a `DrillConnection`
+#' @param ... ignored
+#' @export
+format.DrillConnection <- function(x, ...) {
+  if (dbIsValid(x)) {
+    sprintf("<DrillConnection %s:%s>", x@host, x@port)
+  }
+}
+
+
+
+
+
+
+

@@ -1,3 +1,2 @@
-# .onLoad <- function(libname, pkgname) {
-#   if (requireNamespace("rJava")) rJava::.jpackage(pkgname, lib.loc = libname)
-# }
+.pkgenv <- new.env(parent=emptyenv())
+.pkgenv$bigint_warn_once <- FALSE

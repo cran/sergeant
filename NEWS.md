@@ -1,6 +1,44 @@
-# sergeant 0.5.0
+# sergeant 0.9.0
 
-- make rJava & RJDBC optional (WIP)
+- Column order preserved in REST API & REST API DBI-based calls if
+  using Apache Drill 1.15.0+ (Addresses #18)
+- New `drill_functions()` function to show all the available Apache 
+  Drill built-in functions & UDFs (Apache Drill 1.15.0+ required); this
+  function has an option to display the functions in a widget and has
+  added the `DT` package to `Suggests` in the DESCRIPTION file.
+- DBI & dbplyr-REST interface queries now return much better query error 
+  messages including original query text and a link to the Drill
+  query profile (so users can do more in-depth debugging)
+- License change to GPL-3 since the pkg now uses code from bibrquery
+- New `option()` => "`sergeant.bigint.warnonce`" to control `BIGINT` 
+  warnings. Use `options(sergeant.bigint.warnonce = FALSE)` 
+- Fixed bug in `dbListFields()` (`DrillConnection-class`)
+- Added `as.integer64()` `dplyr` custom Drill function to convert
+  columns to `BIGINT`
+- Added `ctas_profile()` to automagically create a CTAS query from 
+  a Drill `tbl` (Ref: #29 / inspired by David Severski)
+- Switched to the more diminuitive {tinytest}
+- Added more tests to cover DBI and extended/new d[b]plyr operations
+
+# sergeant 0.7.0-BETA
+
+- separated out Java-based functions (i.e. the JDBC driver) into a 
+  sibling package `sergeant.caffeinated`
+
+# sergeant 0.7.0-ALPHA
+
+- enhanced JDBC connectivity
+- updated REST API to handle new features in Drill 1.14.0
+
+# sergeant 0.6.0
+
+- Authentication support for DBI/dplyr and `drill_connection()` pure REST interface
+
+# sergeant 0.5.2
+
+- Make rJava & RJDBC optional (WIP)
+- Hack to remove ";" at end of queries sent to `drill_query()`
+- Added `dbplyr` windows functions to `sql_translate_env`
 
 # sergeant 0.4.0
 
