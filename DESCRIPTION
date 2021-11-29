@@ -1,6 +1,6 @@
 Package: sergeant
 Title: Tools to Transform and Query Data with Apache Drill
-Version: 0.9.0
+Version: 0.9.1
 Authors@R: c(
       person("Bob", "Rudis", email = "bob@rud.is", role = c("aut", "cre"), 
              comment = c(ORCID = "0000-0001-5670-2640")),
@@ -19,18 +19,17 @@ Description: Apache Drill is a low-latency distributed query engine designed to 
     using official Drill Docker images/containers.
 Depends: R (>= 3.6.0)
 URL: https://gitlab.com/hrbrmstr/sergeant
-BugReports: https://gitlab.com/hrbrmstr/sergeant/issues
+BugReports: https://gitlab.com/hrbrmstr/sergeant/-/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 Imports: bit64 (>= 0.9-7), DBI (>= 0.7), dplyr (>= 0.8.0), dbplyr (>=
         1.3.0), httr (>= 1.2.1), jsonlite (>= 1.5.0), htmltools (>=
         0.3.6), readr (>= 1.1.1), purrr (>= 0.2.2), scales (>= 0.4.1),
-        tibble, utils, methods, magrittr (>= 1.5)
+        stringi, tibble, utils, methods, magrittr (>= 1.5)
 Suggests: DT (>= 0.5), stevedore, tinytest, covr (>= 3.0.0), DBItest
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.2
 NeedsCompilation: no
-Packaged: 2020-06-01 14:41:31 UTC; hrbrmstr
+Packaged: 2021-11-29 17:43:25 UTC; hrbrmstr
 Author: Bob Rudis [aut, cre] (<https://orcid.org/0000-0001-5670-2640>),
   Edward Visel [ctb],
   Andy Hine [ctb],
@@ -39,4 +38,4 @@ Author: Bob Rudis [aut, cre] (<https://orcid.org/0000-0001-5670-2640>),
   James Lamb [ctb]
 Maintainer: Bob Rudis <bob@rud.is>
 Repository: CRAN
-Date/Publication: 2020-06-01 15:00:02 UTC
+Date/Publication: 2021-11-29 18:40:02 UTC
